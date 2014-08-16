@@ -237,7 +237,7 @@ main =  putStrLn "Enter your name" >>=
 ```
 
 '>>=' is the name used in Haskell for what we called 'bind'. The reason that they did not just use 'bind' is because
-in Haskell, any 'non-alphamnumeric' symbols, while being ordinary functions, are interpreted by the parser
+in Haskell, any 'non-alphanumeric' symbols are interpreted by the parser
 as 'infix' functions, just like '+', '-' and '*'. So just as, to sum two numbers you write:
 
 ```
@@ -258,6 +258,11 @@ main = bind (putStrLn "Enter your name")
             (\_ -> (bind getLine
                          (\name -> putStrLn ("Hello " ++ name ++ ". It's nice to meet you."))))
 ```
+
+But why bother with the syntactical distinction of 'bind' vs '>>=' when we already have
+'do' notation? I think the '>>=' syntax came about before 'do' notation was added to Haskell.
+Just like how we used a "fluent interface" for our object oriented 'bind', in Haskell it
+made sense to use a symbol with infix conventions to specify how operations are chained together.
 
 ### A scoping/precedence gotcha
 
@@ -288,7 +293,7 @@ main = putStrLn "Enter your first name" >>=
 
 If you compiled the above program you'd find that everything works perfectly.
 
-Naively follow this logic in our C# framework, you might try something like this:
+Following this logic in our C# framework, you might try something like this:
 
 ```C#
         public static IOAction main =
