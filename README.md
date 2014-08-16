@@ -25,13 +25,13 @@ all "IOActions":
     interface Runtime
     {
         // An IO action which reads a line of input from the user.
-        IOAction readLine();
+        IOAction getLine();
         // An IO action which writes the specified line of text to the screen.
-        IOAction writeLine(string text);
+        IOAction putStrLn(string text);
     }
 ```
 
-So, for example, "Runtime.writeLine" is a pure function with no side-effects: it does not actually write
+So, for example, "Runtime.putStrLn" is a pure function with no side-effects: it does not actually write
 a line of text when you call it. It instead returns an IOAction which will write a line of text
 to the screen *if* it ends up being evaluated.
 
@@ -61,14 +61,24 @@ using their name:
 
 ```
         public static IOAction Main =
-            rt.writeLine("Enter your name").
-                bind(dummy => rt.readLine()).
-                bind(name => rt.writeLine("Hello " + name + ". It's nice to meet you. Press return to exit")).
-                bind(dummy => rt.readLine());
+            rt.putStrLn("Enter your name").
+                bind(dummy => rt.getLine()).
+                bind(name => rt.putStrLn("Hello " + name + ". It's nice to meet you. ")).
+                bind(dummy => rt.getLine());
 ```
 
 So basically, you end up writing a purely functional program which builds up an IOAction out of these individual
 primitive IOActions. The final IOAction, "Main", is then evaluated by the imperative Haskell runtime to execute the code.
+
+### Haskell equivalent
+
+Here is what the Haskell version of this program looks like:
+
+```
+main = (putStrLn "Enter your name") >>=
+        (\_ -> getLine) >>=
+        (\name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you.")
+```
 
 ### Looping
 All types of interactivity are possible in this framework.
@@ -76,28 +86,30 @@ All types of interactivity are possible in this framework.
 Here is a purely functional program which will run forever until the user
 answers the question correctly:
 
+```
         private static IOAction checkInput(string input)
         {
             int num;
             if(int.TryParse(input, out num) && num == 4)
-                return rt.writeLine("That's the right answer!");
+                return rt.putStrLn("That's the right answer!");
             else
-                return rt.writeLine(string.Format("{0} sorry, we're not in the 1984. Please try again...", input)).bind(ask);
+                return rt.putStrLn(string.Format("{0} sorry, we're not in Orwell's novel 1984. Please try again...", input)).bind(ask);
         }
 
         private static IOAction ask(string input)
         {
-            return rt.writeLine("What is 2 + 2?").
-                bind(unused => rt.readLine()).
+            return rt.putStrLn("What is 2 + 2?").
+                bind(unused => rt.getLine()).
                 bind(checkInput);
         }
 
         public static IOAction Main =
-            rt.writeLine("Enter your name").
-                bind(unused => rt.readLine()).
-                bind(name => rt.writeLine("Hello " + name + ". It's nice to meet you.")).
-                bind(unused => rt.writeLine("OK time for a little test...")).
+            rt.putStrLn("Enter your name").
+                bind(unused => rt.getLine()).
+                bind(name => rt.putStrLn("Hello " + name + ". It's nice to meet you.")).
+                bind(unused => rt.putStrLn("OK time for a little test...")).
                 bind(ask);
+```
 
 ### Example dialog:
 
@@ -116,6 +128,26 @@ What is 2 + 2?
 What is 2 + 2?
 4
 That's the right answer!
+```
+
+### Haskell equivalent
+
+Here's the Haskell equivalent of the above program:
+
+```
+checkInput input = case (reads input) of
+                    [(4, _)] -> (putStrLn "That's the right answer!")
+                    _ -> (putStrLn (input ++ " sorry, we're not in Orwell's novel 1984. Please try again...")) >>= ask
+
+ask input = (putStrLn "What is 2 + 2?") >>=
+            (\_ -> getLine) >>=
+            checkInput
+
+main = (putStrLn "Enter your name") >>=
+       (\_ -> getLine) >>=
+       (\name -> putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")) >>=
+       (\_ -> putStrLn "Ok time for a little test...") >>=
+       ask
 ```
 
 ### Implementation
@@ -221,9 +253,26 @@ of the purely functional part of our program:
 ### Conclusion
 
 Instead of explicitly calling "bind", Haskell has a special syntax, called "do notation", which can be used instead
-to give a slightly cleaner syntax for chaining together a bunch of "monad" operations.
+to give a slightly cleaner syntax for chaining together a bunch of "monad" operations. For example, instead of:
 
-C# actually also has its own "Monad" syntax (Linq!).
+```
+main = (putStrLn "Enter your name") >>=
+        (\_ -> getLine) >>=
+        (\name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you.")
+```
+
+we could have written
+
+```
+main = do
+        putStrLn "Enter your name"
+        name <- getLine
+        putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")
+```
+
+which is expanded by the Haskell compiler into the "bind/>>=" version.
+
+Well, C# actually also has its own "Monad" syntax (Linq!).
 
 Also, when I wrote this, for simplicity, I just assumed that the input and output of each IO operation has to be a string.
 

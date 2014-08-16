@@ -77,12 +77,12 @@ namespace IOMonad
     {
         private readonly IOAction readLn = new ReadLine();
 
-        public IOAction readLine()
+        public IOAction getLine()
         {
             return readLn;
         }
 
-        public IOAction writeLine(string text)
+        public IOAction putStrLn(string text)
         {
             return new WriteLine(text);
         }

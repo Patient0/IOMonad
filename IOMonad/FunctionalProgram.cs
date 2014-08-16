@@ -21,9 +21,9 @@ namespace IOMonad
     interface Runtime
     {
         // An IO action which reads a line of input from the user.
-        IOAction readLine();
+        IOAction getLine();
         // An IO action which writes the specified line of text to the screen.
-        IOAction writeLine(string text);
+        IOAction putStrLn(string text);
     }
 
     class FunctionalProgram
@@ -34,23 +34,23 @@ namespace IOMonad
         {
             int num;
             if(int.TryParse(input, out num) && num == 4)
-                return rt.writeLine("That's the right answer!");
+                return rt.putStrLn("That's the right answer!");
             else
-                return rt.writeLine(string.Format("{0} sorry, we're not in Orwell's novel 1984. Please try again...", input)).bind(ask);
+                return rt.putStrLn(string.Format("{0} sorry, we're not in Orwell's novel 1984. Please try again...", input)).bind(ask);
         }
 
         private static IOAction ask(string input)
         {
-            return rt.writeLine("What is 2 + 2?").
-                bind(unused => rt.readLine()).
+            return rt.putStrLn("What is 2 + 2?").
+                bind(unused => rt.getLine()).
                 bind(checkInput);
         }
 
         public static IOAction Main =
-            rt.writeLine("Enter your name").
-                bind(unused => rt.readLine()).
-                bind(name => rt.writeLine("Hello " + name + ". It's nice to meet you.")).
-                bind(unused => rt.writeLine("OK time for a little test...")).
+            rt.putStrLn("Enter your name").
+                bind(unused => rt.getLine()).
+                bind(name => rt.putStrLn("Hello " + name + ". It's nice to meet you.")).
+                bind(unused => rt.putStrLn("OK time for a little test...")).
                 bind(ask);
     }
 }
