@@ -16,7 +16,7 @@ it can't actually execute any imperative code.
 However, what you can imagine is how a language like C# will "evaluate" an IOAction that has been
 given to it.
 
-### builtin IO actions
+### Builtin IO actions
 
 So, we start with a bunch of pre-defined functions for performing input and output, which again are
 all "IOActions":
@@ -56,7 +56,7 @@ to the next IO action that should execute.
 
 ### Example
 
-Here is a "purely functional" program which asks a user for their name, and the greets them
+Here is a "purely functional" program which asks a user for their name, and then greets them
 using their name:
 
 ```
@@ -67,14 +67,14 @@ using their name:
                 bind(dummy => rt.readLine());
 ```
 
-So basically, you end up writing a purely functional program which evaluates to an IOAction, which
-is then evaluated by the imperative Haskell runtime to execute the code.
+So basically, you end up writing a purely functional program which builds up an IOAction out of these individual
+primitive IOActions. The final IOAction, "Main", is then evaluated by the imperative Haskell runtime to execute the code.
 
 ### Looping
 All types of interactivity are possible in this framework.
 
 Here is a purely functional program which will run forever until the user
-answers the appropriate question correctly:
+answers the question correctly:
 
         private static IOAction checkInput(string input)
         {
@@ -98,6 +98,25 @@ answers the appropriate question correctly:
                 bind(name => rt.writeLine("Hello " + name + ". It's nice to meet you.")).
                 bind(unused => rt.writeLine("OK time for a little test...")).
                 bind(ask);
+
+### Example dialog:
+
+Here's a transcript from one run of this program:
+```
+Enter your name
+Paul
+Hello Paul. It's nice to meet you.
+OK time for a little test...
+What is 2 + 2?
+3
+3 sorry, we're not in Orwell's novel 1984. Please try again...
+What is 2 + 2?
+7
+7 sorry, we're not in Orwell's novel 1984. Please try again...
+What is 2 + 2?
+4
+That's the right answer!
+```
 
 ### Implementation
 

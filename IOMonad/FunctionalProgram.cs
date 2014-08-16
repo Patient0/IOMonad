@@ -36,7 +36,7 @@ namespace IOMonad
             if(int.TryParse(input, out num) && num == 4)
                 return rt.writeLine("That's the right answer!");
             else
-                return rt.writeLine(string.Format("{0} sorry, we're not in the 1984. Please try again...", input)).bind(ask);
+                return rt.writeLine(string.Format("{0} sorry, we're not in Orwell's novel 1984. Please try again...", input)).bind(ask);
         }
 
         private static IOAction ask(string input)
