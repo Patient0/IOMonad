@@ -1,42 +1,40 @@
 IOMonad
 =======
-
-This is a small program I wrote to clarify in my own mind how the IO monad is implemented in Haskell.
-
 Haskell is a *purely* functional language. This means that functions in Haskell, without exception,
-are not allowed to do anything other than return values based on their inputs. A haskell function
+are not allowed to do anything other than return values based on their inputs. A Haskell function
 cannot:
+
   * print to the screen
-  * read input from the screen
-  * do anything that depends on something other than the input that was passed in
+  * read input typed in by a user
+  * do anything other than evaluate something based on the function's inputs
 
 How on earth then do Haskell programs actually do anything "in the real world"? How do you write a program
 in Haskell which asks questions and gives different answers based on what someone has typed in?
 
 Haskell's answer to this problem is an abstraction called the *IO Monad*.
 
-The IO Monad in Haskell is how you can write "purely functional" programs with no side effects which somehow
-can still interact with the outside world.
+This IO Monad concept allows you to write code that is still *purely functional* but which still actually
+does stuff, in such a way that the parts which depend on "the outside world" are clearly separated
+from the parts that don't.
 
 The way it works is that you have "IO actions", which are actually capable of interacting with the outside world.
 
-You write a purely functional program which composes together a bunch of IOActions - but your code does not
+You write a purely functional program which combines together a bunch of IOActions - but your code does not
 actually *execute* the IO actions. Rather, the Haskell runtime executes them.
 
 I found it hard to imagine how this works in Haskell itself because, of course, Haskell is pure so
-it can't actually execute any imperative code.
+it can't actually execute any imperative code. So in pure Haskell, there's a piece of the puzzle which is
+implicit.
 
-However, what you can imagine is how a language like C# will "evaluate" an IOAction that has been
-given to it.
-
-So this article describes how you might build such a framework in C#.
+However, what is easier to reason about is how you might structure a C# program into "functional" and "imperative"
+parts such that the functional part is *purely* functional, yet still has full control over everything that happens.
 
 ### Builtin IO actions
 
 So, we start with a bunch of pre-defined functions for performing input and output, which again are
 all "IOActions":
 
-```
+```C#
     interface Runtime
     {
         // An IO action which reads a line of input from the user.
@@ -62,19 +60,20 @@ next. In C#, this could look like this:
     interface IOAction
     {
         IOAction bind(Operation operation);
-        IOAction wrap(string text);
     }
 ```
 
-So here, "Operation" is a pure function which takes the result of the previous IO action and then evaluates
+So here, an "Operation" is a pure function which takes the result of the previous IO action and then evaluates
 to the next IO action that should execute.
 
 ### Example
 
-Here is a "purely functional" program which asks a user for their name, and then greets them
+Here is a "purely functional" program in this framework which asks a user for their name, and then greets them
 using their name:
 
 ```C#
+        public static readonly Runtime rt = RuntimeImpl.Instance;
+
         public static IOAction Main =
             rt.putStrLn("Enter your name").
                 bind(dummy => rt.getLine()).
@@ -83,39 +82,9 @@ using their name:
 ```
 
 So basically, you end up writing a purely functional program which builds up an IOAction out of these individual
-primitive IOActions. The final IOAction, "Main", is then evaluated by the imperative Haskell runtime to execute the code.
+primitive IOActions. The resultant "Main" IOAction is then going to be evaluated by our imperative "runtime".
 
-### Haskell equivalent
-
-Here is what the Haskell version of this program looks like:
-
-```Haskell
-main = do
-        putStrLn "Enter your name"
-        name <- getLine
-        putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")
-```
-
-The way to understand the above code is that this "do" notation is just syntactic sugar
-for the following:
-
-```Haskell
-main =  putStrLn "Enter your name" >>=
-        \_ -> getLine >>=
-        \name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you."
-```
-
-where '>>=' is the equivalent of the 'bind' function in our example, and \x -> expression is the Haskell syntax
-for creating an anonymous function taking a parameter "x".
-
-### Result
-```
-Enter your name
-Paul
-Hello Paul. It's nice to meet you.
-```
-
-### Implementation
+### Implementation of the imperative part
 
 How might the actual evaluation of IOActions be implemented? Here's one very simple approach.
 
@@ -146,22 +115,10 @@ We arrange things so that, on the "imperative" side of things, all IOActions are
         }
     }
 
-    class Wrapped : RuntimeAction
-    {
-        readonly string text;
-        public Wrapped(string text)
-        {
-            this.text = text;
-        }
-        public override string perform()
-        {
-            return text;
-        }
-    }
 ```
+RuntimeAction implements IOAction, providing the actual implementation of the "bind"
+method: 
 
-RuntimeAction implements IOAction, and provides the "bind" and "wrap"
-methods: 
 ```C#
     abstract class RuntimeAction : IOAction
     {
@@ -170,17 +127,11 @@ methods:
             return new CombinedAction(this, operation);
         }
 
-        public IOAction wrap(string text)
-        {
-            return new Wrapped(text);
-        }
-
         public abstract string perform();
     }
 ```
 
-The real "meat" of it all is in the implementation of the bind
-method, which returns a CombinedAction. CombinedAction evaluates the first IO action,
+The real "meat" of it all is the CombinedAction class. It evaluates the first IO action,
 passes that result to the next Operation, and then evaluates the IO action returned
 from that next operation:
 
@@ -204,7 +155,7 @@ from that next operation:
     }
 ```
 
-All that's left for our *real* main method to is to finally evaluate the IOAction
+All that's left for our *real* main method to do is to finally evaluate the IOAction
 of the purely functional part of our program, in "the real world":
 
 ```C#
@@ -267,36 +218,7 @@ That's the right answer!
 
 ### Haskell equivalent
 
-Here's the Haskell equivalent of the above program:
-
-```Haskell
-checkInput input = case (reads input) of
-                    [(4, _)] -> (putStrLn "That's the right answer!")
-                    _ -> (putStrLn (input ++ " sorry, we're not in Orwell's novel 1984. Please try again...")) >>= ask
-
-ask input = (putStrLn "What is 2 + 2?") >>=
-            (\_ -> getLine) >>=
-            checkInput
-
-main = (putStrLn "Enter your name") >>=
-       (\_ -> getLine) >>=
-       (\name -> putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")) >>=
-       (\_ -> putStrLn "Ok time for a little test...") >>=
-       ask
-```
-
-### Final thoughts
-
-Instead of explicitly calling "bind", Haskell has a special syntax, called "do notation", which can be used instead
-to give a slightly cleaner syntax for chaining together a bunch of "monad" operations. For example, instead of:
-
-```Haskell
-main = putStrLn "Enter your name" >>=
-        \_ -> getLine >>=
-        \name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you."
-```
-
-we could have written
+Here is what the Haskell version of our first example would look like:
 
 ```Haskell
 main = do
@@ -305,16 +227,120 @@ main = do
         putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")
 ```
 
-which is expanded by the Haskell compiler into the "bind/>>=" version.
+The way to understand the above code is that this "do" notation is just syntactic sugar
+for the following:
 
-Well, C# actually also has its own "Monad" syntax (Linq!).
+```Haskell
+main =  putStrLn "Enter your name" >>=
+        \_ -> getLine >>=
+        \name -> putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")
+```
 
-Also, when I wrote this, for simplicity, I just assumed that the input and output of each IO operation has to be a string.
+'>>=' is the name used in Haskell for what we called 'bind'. The reason that they did not just use 'bind' is because
+in Haskell, any 'non-alphamnumeric' symbols, while being ordinary functions, are interpreted by the parser
+as 'infix' functions, just like '+', '-' and '*'. So just as, to sum two numbers you write:
 
-You could "genericize" all of the above code so that each "IO action" can return any type of object, and also
-make use of C#'s Linq syntax to give a cleaner way of combining together each of the IO operations.
+```
+x + y
+```
 
-In fact, after I wrote this, I've discovered
-[this other article] (http://themechanicalbride.blogspot.co.uk/2008/11/haskell-for-c-programmers-part-2.html) which
-makes greater use of C#'s Linq syntax and allows for a IO actions that can evaluate to any type.
+in Haskell, to "bind" an IO action 'x' to an operation 'y', you write:
+
+```
+x >>= y
+```
+
+If Haskell had actually used the word 'bind' for this binding function, the infix style wouldn't apply
+and we would have had much worse syntax. Something like:
+
+```Haskell
+main = bind (putStrLn "Enter your name")
+            (\_ -> (bind getLine
+                         (\name -> putStrLn ("Hello " ++ name ++ ". It's nice to meet you."))))
+```
+
+### A scoping/precedence gotcha
+
+I want to bring your attention to something quite important that I think
+has been glossed over in all of the Haskell introductions that I have read so far. At least,
+I've had a lot of trouble understanding how Haskell monads work until I got this point!
+
+Consider the following Haskell program:
+
+```Haskell
+main = do
+        putStrLn "Enter your first name"
+        first <- getLine
+        putStrLn "Enter your last name"
+        last <- getLine
+        putStrLn ("Hello " ++ first ++ " " ++ last ++ ".")
+```
+
+We now know that this is syntactic sugar for:
+
+```Haskell
+main = putStrLn "Enter your first name" >>=
+       \_ -> getLine >>=
+       \first -> putStrLn "Enter your last name" >>=
+       \_ -> getLine >>=
+       \last -> putStrLn ("Hello " ++ first ++ " " ++ last ++ ".")
+```
+
+If you compiled the above program you'd find that everything works perfectly.
+
+Naively follow this logic in our C# framework, you might try something like this:
+
+```C#
+        public static IOAction main =
+            rt.writeLine("Enter first name").
+                bind(dummy => rt.readLine()).
+                bind(first => rt.writeLine("Enter last name")).
+                bind(dummy => rt.readLine()).
+                bind(last => rt.writeLine("Hello " + first + " " + last + "."));
+```
+
+Except that you'll find that it does not compile. It will complain that "first" is not in scope.
+
+It comes down to the fact that "->" used to construct an anonymous function in Haskell has lower precedence
+than the ">>=" used in the body. So in effect, each of the subsequent "bind" calls ends up grouped
+*to the right* rather than to the left.
+
+The correct translation of the Haskell into our C# version is:
+
+```C#
+        public static IOAction main =
+            rt.writeLine("Enter first name").
+            bind(dummy1 => rt.readLine().
+            bind(first => rt.writeLine("Enter last name").
+            bind(dummy2 => rt.readLine().
+            bind(last => rt.writeLine("Hello " + first + " " + last + ".")))));
+```
+
+See what I've done? I moved the parentheses so that each function is nested inside its parent. Here is the
+same code indented to reflect that:
+```C#
+        public static IOAction main =
+            rt.writeLine("Enter first name").
+                bind(dummy1 => rt.readLine().
+                    bind(first => rt.writeLine("Enter last name").
+                        bind(dummy2 => rt.readLine().
+                            bind(last => rt.writeLine("Hello " + first + " " + last + ".")))));
+```
+
+Now, each new operation knows all of the contextual information from the preceding operations.
+'first' is still in scope when we evaluate '"Hello " + first + " " + last + "."'.
+
+Nearly all Haskell "monadic" code that I have come across implicitly makes use of this in one way or
+another.
+
+### Final thoughts
+C# actually also has its own version of Haskell's "do" notation - it's called Linq.
+
+As well as using Linq, I could have genericized the IO action type so that each operation could return
+any type, not just a string.
+
+To keep things simple, I didn't use "Linq", and I restricted things to just strings.
+
+However, here is an excellent article that explains these concepts using Linq and which makes use of proper generics:
+[haskell-for-c-programmers-part-2] (http://themechanicalbride.blogspot.co.uk/2008/11/haskell-for-c-programmers-part-2.html).
 
