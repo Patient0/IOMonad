@@ -56,7 +56,7 @@ The next part of the puzzle is that we can bind these IO actions to additional
 operations, each of which takes the input from the previous IO action and returns the IO action to be evaluated
 next. In C#, this could look like this:
 
-```
+```C#
     internal delegate IOAction Operation(string input);
 
     interface IOAction
@@ -74,7 +74,7 @@ to the next IO action that should execute.
 Here is a "purely functional" program which asks a user for their name, and then greets them
 using their name:
 
-```
+```C#
         public static IOAction Main =
             rt.putStrLn("Enter your name").
                 bind(dummy => rt.getLine()).
@@ -89,11 +89,24 @@ primitive IOActions. The final IOAction, "Main", is then evaluated by the impera
 
 Here is what the Haskell version of this program looks like:
 
+```Haskell
+main = do
+        putStrLn "Enter your name"
+        name <- getLine
+        putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")
 ```
-main = (putStrLn "Enter your name") >>=
-        (\_ -> getLine) >>=
-        (\name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you.")
+
+The way to understand the above code is that this "do" notation is just syntactic sugar
+for the following:
+
+```Haskell
+main =  putStrLn "Enter your name" >>=
+        \_ -> getLine >>=
+        \name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you."
 ```
+
+where '>>=' is the equivalent of the 'bind' function in our example, and \x -> expression is the Haskell syntax
+for creating an anonymous function taking a parameter "x".
 
 ### Result
 ```
@@ -110,7 +123,7 @@ We arrange things so that, on the "imperative" side of things, all IOActions are
 'RuntimeAction', which has an imperative "perform" method that actually evaluates the IOAction:
 
 
-```
+```C#
     class ReadLine : RuntimeAction
     {
         public override string perform()
@@ -149,7 +162,7 @@ We arrange things so that, on the "imperative" side of things, all IOActions are
 
 RuntimeAction implements IOAction, and provides the "bind" and "wrap"
 methods: 
-```
+```C#
     abstract class RuntimeAction : IOAction
     {
         public IOAction bind(Operation operation)
@@ -171,7 +184,7 @@ method, which returns a CombinedAction. CombinedAction evaluates the first IO ac
 passes that result to the next Operation, and then evaluates the IO action returned
 from that next operation:
 
-```
+```C#
     class CombinedAction : RuntimeAction
     {
         readonly RuntimeAction first;
@@ -194,7 +207,7 @@ from that next operation:
 All that's left for our *real* main method to is to finally evaluate the IOAction
 of the purely functional part of our program, in "the real world":
 
-```
+```C#
     static void Main(string[] args)
     {
         ((RuntimeAction)FunctionalProgram.Main).perform();
@@ -208,7 +221,7 @@ All types of interactivity are possible in this framework.
 Here is a purely functional program which will run forever until the user
 answers the question correctly:
 
-```
+```C#
         private static IOAction checkInput(string input)
         {
             int num;
@@ -256,7 +269,7 @@ That's the right answer!
 
 Here's the Haskell equivalent of the above program:
 
-```
+```Haskell
 checkInput input = case (reads input) of
                     [(4, _)] -> (putStrLn "That's the right answer!")
                     _ -> (putStrLn (input ++ " sorry, we're not in Orwell's novel 1984. Please try again...")) >>= ask
@@ -277,15 +290,15 @@ main = (putStrLn "Enter your name") >>=
 Instead of explicitly calling "bind", Haskell has a special syntax, called "do notation", which can be used instead
 to give a slightly cleaner syntax for chaining together a bunch of "monad" operations. For example, instead of:
 
-```
-main = (putStrLn "Enter your name") >>=
-        (\_ -> getLine) >>=
-        (\name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you.")
+```Haskell
+main = putStrLn "Enter your name" >>=
+        \_ -> getLine >>=
+        \name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you."
 ```
 
 we could have written
 
-```
+```Haskell
 main = do
         putStrLn "Enter your name"
         name <- getLine
