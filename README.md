@@ -78,7 +78,7 @@ using their name:
         public static IOAction Main =
             rt.putStrLn("Enter your name").
                 bind(dummy => rt.getLine()).
-                bind(name => rt.putStrLn("Hello " + name + ". It's nice to meet you. ")).
+                bind(name => rt.putStrLn("Hello " + name + ". It's nice to meet you.")).
                 bind(dummy => rt.getLine());
 ```
 
@@ -93,6 +93,113 @@ Here is what the Haskell version of this program looks like:
 main = (putStrLn "Enter your name") >>=
         (\_ -> getLine) >>=
         (\name -> putStrLn $ "Hello " ++ name ++ ". It's nice to meet you.")
+```
+
+### Result
+```
+Enter your name
+Paul
+Hello Paul. It's nice to meet you.
+```
+
+### Implementation
+
+How might the actual evaluation of IOActions be implemented? Here's one very simple approach.
+
+We arrange things so that, on the "imperative" side of things, all IOActions are also instances of
+'RuntimeAction', which has an imperative "perform" method that actually evaluates the IOAction:
+
+
+```
+    class ReadLine : RuntimeAction
+    {
+        public override string perform()
+        {
+            return Console.ReadLine();
+        }
+    }
+
+    class WriteLine : RuntimeAction
+    {
+        readonly string text;
+        public WriteLine(string text)
+        {
+            this.text = text;
+        }
+        public override string perform()
+        {
+            Console.WriteLine(text);
+            return "";
+        }
+    }
+
+    class Wrapped : RuntimeAction
+    {
+        readonly string text;
+        public Wrapped(string text)
+        {
+            this.text = text;
+        }
+        public override string perform()
+        {
+            return text;
+        }
+    }
+```
+
+RuntimeAction implements IOAction, and provides the "bind" and "wrap"
+methods: 
+```
+    abstract class RuntimeAction : IOAction
+    {
+        public IOAction bind(Operation operation)
+        {
+            return new CombinedAction(this, operation);
+        }
+
+        public IOAction wrap(string text)
+        {
+            return new Wrapped(text);
+        }
+
+        public abstract string perform();
+    }
+```
+
+The real "meat" of it all is in the implementation of the bind
+method, which returns a CombinedAction. CombinedAction evaluates the first IO action,
+passes that result to the next Operation, and then evaluates the IO action returned
+from that next operation:
+
+```
+    class CombinedAction : RuntimeAction
+    {
+        readonly RuntimeAction first;
+        readonly Operation next;
+        public CombinedAction(RuntimeAction first, Operation next)
+        {
+            this.first = first;
+            this.next = next;
+        }
+
+        public override string perform()
+        {
+            var result = first.perform();
+            var nextAction = next(result);
+            return ((RuntimeAction)nextAction).perform();
+        }
+    }
+```
+
+All that's left for our *real* main method to is to finally evaluate the IOAction
+of the purely functional part of our program, in "the real world":
+
+```
+    static void Main(string[] args)
+    {
+        ((RuntimeAction)FunctionalProgram.Main).perform();
+    }
+
 ```
 
 ### Looping
@@ -163,106 +270,6 @@ main = (putStrLn "Enter your name") >>=
        (\name -> putStrLn ("Hello " ++ name ++ ". It's nice to meet you.")) >>=
        (\_ -> putStrLn "Ok time for a little test...") >>=
        ask
-```
-
-### Implementation
-
-How might the actual evaluation of IOActions be implemented? Here's one very simple approach.
-
-We arrange things so that, on the "imperative" side of things, all IOActions are also instances of
-'RuntimeAction', which has an imperative "perform" method that actually evaluates the IOAction:
-
-
-```
-    class ReadLine : RuntimeAction
-    {
-        public override string perform()
-        {
-            return Console.ReadLine();
-        }
-    }
-
-    class WriteLine : RuntimeAction
-    {
-        readonly string text;
-        public WriteLine(string text)
-        {
-            this.text = text;
-        }
-        public override string perform()
-        {
-            Console.WriteLine(text);
-            return "";
-        }
-    }
-
-    class Wrapped : RuntimeAction
-    {
-        readonly string text;
-        public Wrapped(string text)
-        {
-            this.text = text;
-        }
-        public override string perform()
-        {
-            return text;
-        }
-    }
-```
-
-RuntimeAction implements IOAction, and provides the "bind" and "wrap"
-methods: 
-```
-    abstract class RuntimeAction : IOAction
-    {
-        public IOAction bind(Operation operation)
-        {
-            return new CombinedAction(this, operation);
-        }
-
-        public IOAction wrap(string text)
-        {
-            return new Wrapped(text);
-        }
-
-        public abstract string perform();
-    }
-```
-
-The real "meat" of the implementation is in the implementation of the bind
-method, which returns a CombinedAction. CombinedAction evaluates the first IO action,
-passes that result to the next Operation, and then evaluates the IO action returned
-from that next operation:
-
-```
-    class CombinedAction : RuntimeAction
-    {
-        readonly RuntimeAction first;
-        readonly Operation next;
-        public CombinedAction(RuntimeAction first, Operation next)
-        {
-            this.first = first;
-            this.next = next;
-        }
-
-        public override string perform()
-        {
-            var result = first.perform();
-            var nextAction = next(result);
-            return ((RuntimeAction)nextAction).perform();
-        }
-    }
-```
-
-All that's left for our *real* main method to is to evaluate the IOAction
-of the purely functional part of our program:
-
-```
-    static void Main(string[] args)
-    {
-        ((RuntimeAction)FunctionalProgram.Main).perform();
-    }
-
 ```
 
 ### Conclusion
