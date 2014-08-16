@@ -272,7 +272,7 @@ main = (putStrLn "Enter your name") >>=
        ask
 ```
 
-### Conclusion
+### Final thoughts
 
 Instead of explicitly calling "bind", Haskell has a special syntax, called "do notation", which can be used instead
 to give a slightly cleaner syntax for chaining together a bunch of "monad" operations. For example, instead of:
