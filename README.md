@@ -3,10 +3,23 @@ IOMonad
 
 This is a small program I wrote to clarify in my own mind how the IO monad is implemented in Haskell.
 
-The IO Monad in Haskell is how you can write "purely functional" programs with no side effects which somehow
-can still interact with the user.
+Haskell is a *purely* functional language. This means that functions in Haskell, without exception,
+are not allowed to do anything other than return values based on their inputs. A haskell function
+cannot:
+  * print to the screen
+  * read input from the screen
+  * do anything that depends on something other than the input that was passed in
 
-The way it works is that you have "IO actions", which are actually capable of interacting with the user.
+How on earth then do Haskell programs actually do anything "in the real world"? How do you write a program
+in Haskell which asks questions and gives different answers based on what someone has typed in?
+
+Haskell's answer to this problem is an abstraction called the *IO Monad*.
+
+The IO Monad in Haskell is how you can write "purely functional" programs with no side effects which somehow
+can still interact with the outside world.
+
+The way it works is that you have "IO actions", which are actually capable of interacting with the outside world.
+
 You write a purely functional program which composes together a bunch of IOActions - but your code does not
 actually *execute* the IO actions. Rather, the Haskell runtime executes them.
 
@@ -15,6 +28,8 @@ it can't actually execute any imperative code.
 
 However, what you can imagine is how a language like C# will "evaluate" an IOAction that has been
 given to it.
+
+So this article describes how you might build such a framework in C#.
 
 ### Builtin IO actions
 
@@ -32,8 +47,8 @@ all "IOActions":
 ```
 
 So, for example, "Runtime.putStrLn" is a pure function with no side-effects: it does not actually write
-a line of text when you call it. It instead returns an IOAction which will write a line of text
-to the screen *if* it ends up being evaluated.
+a line of text when you call it. Rather, when it is evaluated outside of the functional program, it will
+write a line of text to the screen, *if* it ends up being evaluated at all.
 
 ### Binding operations to actions
 
