@@ -5,6 +5,9 @@ using System.Text;
 
 namespace IOMonad
 {
+    // An operation is a pure function which takes the result of
+    // the previous IO action and returns the IO action that
+    // should be evaluated next.
     internal delegate IOAction Operation(string input);
 
     interface IOAction
@@ -17,7 +20,9 @@ namespace IOMonad
 
     interface Runtime
     {
+        // An IO action which reads a line of input from the user.
         IOAction readLine();
+        // An IO action which writes the specified line of text to the screen.
         IOAction writeLine(string text);
     }
 

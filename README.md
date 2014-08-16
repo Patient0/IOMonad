@@ -8,14 +8,38 @@ can still interact with the user.
 
 The way it works is that you have "IO actions", which are actually capable of interacting with the user.
 You write a purely functional program which composes together a bunch of IOActions - but your code does not
-actually *execute* the IO actions. Rather, the Haskell runtime executes them. It's hard to imagine how
-this works in Haskell itself because, of course, Haskell is pure so it can't actually execute any
-imperative code.
+actually *execute* the IO actions. Rather, the Haskell runtime executes them.
+
+I found it hard to imagine how this works in Haskell itself because, of course, Haskell is pure so
+it can't actually execute any imperative code.
 
 However, what you can imagine is how a language like C# will "evaluate" an IOAction that has been
 given to it.
 
-To purely functional C# code, the IO action might look like this:
+### builtin IO actions
+
+So, we start with a bunch of pre-defined functions for performing input and output, which again are
+all "IOActions":
+
+```
+    interface Runtime
+    {
+        // An IO action which reads a line of input from the user.
+        IOAction readLine();
+        // An IO action which writes the specified line of text to the screen.
+        IOAction writeLine(string text);
+    }
+```
+
+So, for example, "Runtime.writeLine" is a pure function with no side-effects: it does not actually write
+a line of text when you call it. It instead returns an IOAction which will write a line of text
+to the screen *if* it ends up being evaluated.
+
+### Binding operations to actions
+
+The next part of the puzzle is that we can bind these IO actions to additional
+operations, each of which takes the input from the previous IO action and returns the IO action to be evaluated
+next. In C#, this could look like this:
 
 ```
     internal delegate IOAction Operation(string input);
@@ -27,30 +51,13 @@ To purely functional C# code, the IO action might look like this:
     }
 ```
 
-So here, "Operation" is a function which takes the result of the previous IO action and then evaluates
-to the next IO action that they should execute.
+So here, "Operation" is a pure function which takes the result of the previous IO action and then evaluates
+to the next IO action that should execute.
 
-The way it works is that you can "bind" additional behaviour (I've called it an 'Operation') here
-to the results of a previous IO action.
+### Example
 
-Finally, here are a bunch of pre-defined functions for performing input and output, which again are
-all "IOActions":
-
-```
-    interface Runtime
-    {
-        IOAction readLine();
-        IOAction writeLine(string text);
-        // etc.
-    }
-```
-
-So, for example, the "readLine" function is a pure function: it does not actually read a line. But it
-returns an IOAction which *will* read a line of input from the user, and arrange for that line of
-input to be available as an input to the operation that gets "bound" to the next IOAction.
-
-In this framework, here is a "purely functional" program which asks a user for their name, then
-says "Hello {name}" back to them:
+Here is a "purely functional" program which asks a user for their name, and the greets them
+using their name:
 
 ```
         public static IOAction Main =
@@ -60,21 +67,151 @@ says "Hello {name}" back to them:
                 bind(dummy => rt.readLine());
 ```
 
+So basically, you end up writing a purely functional program which evaluates to an IOAction, which
+is then evaluated by the imperative Haskell runtime to execute the code.
 
-You write a purely functional program which evaluates to a particular "IO action". This IO action
-then 
+### Looping
+All types of interactivity are possible in this framework.
 
-The way it actually works is that the Haskell runtime, which can actually implement side effects, executes
-your "IO" actions.
+Here is a purely functional program which will run forever until the user
+answers the appropriate question correctly:
 
-The key thing that makes it hard to understand, in my opinion, is that you can't actually look at implementation
-of the "IO" bind method, (which is what basically makes a Monad a Monad).
+        private static IOAction checkInput(string input)
+        {
+            int num;
+            if(int.TryParse(input, out num) && num == 4)
+                return rt.writeLine("That's the right answer!");
+            else
+                return rt.writeLine(string.Format("{0} sorry, we're not in the 1984. Please try again...", input)).bind(ask);
+        }
+
+        private static IOAction ask(string input)
+        {
+            return rt.writeLine("What is 2 + 2?").
+                bind(unused => rt.readLine()).
+                bind(checkInput);
+        }
+
+        public static IOAction Main =
+            rt.writeLine("Enter your name").
+                bind(unused => rt.readLine()).
+                bind(name => rt.writeLine("Hello " + name + ". It's nice to meet you.")).
+                bind(unused => rt.writeLine("OK time for a little test...")).
+                bind(ask);
+
+### Implementation
+
+How might the actual evaluation of IOActions be implemented? Here's one very simple approach.
+
+We arrange things so that, on the "imperative" side of things, all IOActions are also instances of
+'RuntimeAction', which has an imperative "perform" method that actually evaluates the IOAction:
 
 
-The way that this works is that you write a function that has the type "IO". 
+```
+    class ReadLine : RuntimeAction
+    {
+        public override string perform()
+        {
+            return Console.ReadLine();
+        }
+    }
 
-WHat happens is that your purely functional program, "main", has to actually be of the type "IO ()".
+    class WriteLine : RuntimeAction
+    {
+        readonly string text;
+        public WriteLine(string text)
+        {
+            this.text = text;
+        }
+        public override string perform()
+        {
+            Console.WriteLine(text);
+            return "";
+        }
+    }
 
-This then 
+    class Wrapped : RuntimeAction
+    {
+        readonly string text;
+        public Wrapped(string text)
+        {
+            this.text = text;
+        }
+        public override string perform()
+        {
+            return text;
+        }
+    }
+```
 
-How the IOMonad works from an OO perspective
+RuntimeAction implements IOAction, and provides the "bind" and "wrap"
+methods: 
+```
+    abstract class RuntimeAction : IOAction
+    {
+        public IOAction bind(Operation operation)
+        {
+            return new CombinedAction(this, operation);
+        }
+
+        public IOAction wrap(string text)
+        {
+            return new Wrapped(text);
+        }
+
+        public abstract string perform();
+    }
+```
+
+The real "meat" of the implementation is in the implementation of the bind
+method, which returns a CombinedAction. CombinedAction evaluates the first IO action,
+passes that result to the next Operation, and then evaluates the IO action returned
+from that next operation:
+
+```
+    class CombinedAction : RuntimeAction
+    {
+        readonly RuntimeAction first;
+        readonly Operation next;
+        public CombinedAction(RuntimeAction first, Operation next)
+        {
+            this.first = first;
+            this.next = next;
+        }
+
+        public override string perform()
+        {
+            var result = first.perform();
+            var nextAction = next(result);
+            return ((RuntimeAction)nextAction).perform();
+        }
+    }
+```
+
+All that's left for our *real* main method to is to evaluate the IOAction
+of the purely functional part of our program:
+
+```
+    static void Main(string[] args)
+    {
+        ((RuntimeAction)FunctionalProgram.Main).perform();
+    }
+
+```
+
+### Conclusion
+
+Instead of explicitly calling "bind", Haskell has a special syntax, called "do notation", which can be used instead
+to give a slightly cleaner syntax for chaining together a bunch of "monad" operations.
+
+C# actually also has its own "Monad" syntax (Linq!).
+
+Also, when I wrote this, for simplicity, I just assumed that the input and output of each IO operation has to be a string.
+
+You could "genericize" all of the above code so that each "IO action" can return any type of object, and also
+make use of C#'s Linq syntax to give a cleaner way of combining together each of the IO operations.
+
+In fact, after I wrote this, I've discovered
+[this other article] (http://themechanicalbride.blogspot.co.uk/2008/11/haskell-for-c-programmers-part-2.html) which
+makes greater use of C#'s Linq syntax and allows for a IO actions that can evaluate to any type.
+
